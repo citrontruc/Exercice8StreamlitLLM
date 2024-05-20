@@ -1,3 +1,8 @@
+"""
+Contient un ensemble de fonctions afin de pouvoir créer un agent conversationnel avec lequel l'utilisateur peut discuter.
+
+"""
+
 from dotenv import load_dotenv
 import numpy as np
 from openai import OpenAI
@@ -21,6 +26,8 @@ SYSTEM_PROMPT = "Commence tes phrases par 'shiver me timbers matelot !'"
 RAG_DB = pd.read_csv("data/text_rag.csv", sep=";")
 RAG_VECTOR = np.load("data/vector_rag.npy")
 RAG_DB["embedding"] = list(RAG_VECTOR)
+
+# Le chargement d'un modèle d'embedding est long. Si la partie RAG ne vous intéresse pas, supprimer cette ligne.
 EMBEDDING_MODEL = SentenceTransformer("distiluse-base-multilingual-cased")
 
 class ConversationAgent:

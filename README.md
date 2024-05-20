@@ -28,4 +28,3 @@ Afin d'exécuter ce notebook, vous aurez besoin d'un compte openai et d'une clé
 Une fois que cela est fait, exécutez la commande "streamlit run main.py" à la racine du projet.
 
 ---
-
