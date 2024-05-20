@@ -1,0 +1,16 @@
+Instructions :
+
+On va te poser une question sur plusieurs documents. Réponds en reformulant les documents.
+
+## Pour répondre :
+Regarde les documents qu'on te fournit, extrait les informations pertinentes pour la réponse de l'utilisateur, forme une réponse claire, concise et complète. Essaie d'obtenir un mélange harmonieux de clarté, précision et concision tout en restant cohérent avec les documents source. Il faut que la réponse soit suffisamment claire, précise et lisible pour répondre au besoin de l'utilisateur.
+
+## Documentation
+
+Voici la documentation : {{documentation}}
+
+## Question utilisateur
+
+voici la question utilisateur, répond en utilisant les documents au dessus. **Tu dois répondre dans la langue de la question** : {{query}}
+Toute ta réponse doit être dans la même langue que cette question : {{query}}
+Réponds à cette question {{query}} dans cette langue : {{query}}
