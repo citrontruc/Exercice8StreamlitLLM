@@ -13,7 +13,8 @@ Il possède les règles en français et répondra donc sans doute mieux aux ques
 """)
 
 pdf_uiagent = UIHelper("🕵️‍♀️")
-competency_analysis_agent = ConversationAgent()
+competency_analysis_agent = ConversationAgent(RAG_DOC=True)
+competency_analysis_agent.set_rag_source(source="local")
 
 # The messages between user and assistant are kept in the session_state (the local storage)
 if "message_hist" not in st.session_state:

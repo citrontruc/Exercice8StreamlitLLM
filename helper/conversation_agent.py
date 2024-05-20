@@ -10,7 +10,9 @@ from openai.types.chat import ChatCompletionChunk
 from openai._streaming import Stream
 import os
 import pandas as pd
+from PyPDF2 import PdfReader
 import random
+import re
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 import time
@@ -20,15 +22,13 @@ load_dotenv()
 
 OPENAI_KEY = os.environ.get("OPENAI_KEY")
 OPENAI_CLIENT = OpenAI(api_key=OPENAI_KEY)
+SYSTEM_PROMPT = "Commence tes phrases par 'shiver me timbers matelot !'"
 with open("data/rag_prompt.txt") as file:
     RAG_PROMPT_TEMPLATE = "".join(file.readlines())
-SYSTEM_PROMPT = "Commence tes phrases par 'shiver me timbers matelot !'"
-RAG_DB = pd.read_csv("data/text_rag.csv", sep=";")
+LOCAL_RAG_DB = pd.read_csv("data/text_rag.csv", sep=";")
 RAG_VECTOR = np.load("data/vector_rag.npy")
-RAG_DB["embedding"] = list(RAG_VECTOR)
-
-# Le chargement d'un modèle d'embedding est long. Si la partie RAG ne vous intéresse pas, supprimer cette ligne.
-EMBEDDING_MODEL = SentenceTransformer("distiluse-base-multilingual-cased")
+LOCAL_RAG_DB["embedding"] = list(RAG_VECTOR)
+EMBEDDING_MODEL_NAME = "distiluse-base-multilingual-cased"
 
 class ConversationAgent:
     """
@@ -36,13 +36,22 @@ class ConversationAgent:
     Pour l'aider, il peut appeler de l'IA générative.
     """
     
-    def __init__(self) -> None:
+    def __init__(self, RAG_DOC=False) -> None:
         self.OPENAI_KEY = OPENAI_KEY
         self.OPENAI_CLIENT = OPENAI_CLIENT
         self.SYSTEM_PROMPT = SYSTEM_PROMPT
-        self.RAG_PROMPT_TEMPLATE = RAG_PROMPT_TEMPLATE
-        self.EMBEDDING_MODEL = EMBEDDING_MODEL
-        self.RAG_DB = RAG_DB
+
+        # Etapes longues. Ne pas faire systématiquement.
+        if RAG_DOC:
+            self.RAG_PROMPT_TEMPLATE = RAG_PROMPT_TEMPLATE
+            self.EMBEDDING_MODEL = SentenceTransformer(EMBEDDING_MODEL_NAME)
+    
+    def set_rag_source(self, source="local"):
+        if source=="local":
+            self.rag_source = LOCAL_RAG_DB
+        else:
+            self.rag_source = self.prepare_for_rag(source)
+
 
     def random_intro(self) -> Generator[str, Any, None]:
         """
@@ -97,7 +106,6 @@ class ConversationAgent:
         formatted_question = self.format_user_question(user_question=user_question, prompt_template=prompt_template, documentation=documentation)
 
         # Construction d'une réponse
-        print(formatted_question)
         gpt_response = self.OPENAI_CLIENT.chat.completions.create(
             model="gpt-3.5-turbo-0125",
             messages = [{"role": "system", "content": self.SYSTEM_PROMPT}] + message_hist +
@@ -162,9 +170,9 @@ class ConversationAgent:
             chunk_texts (array)
         """
         embedded_question = self.EMBEDDING_MODEL.encode(user_question)
-        similarity = self.RAG_DB["embedding"].apply(lambda x : cosine_similarity([embedded_question], [x])[0][0])
+        similarity = self.rag_source["embedding"].apply(lambda x : cosine_similarity([embedded_question], [x])[0][0])
         closest_chunk_indexes = similarity.sort_values().tail(num_docs).index
-        chunk_texts = self.RAG_DB.iloc[closest_chunk_indexes]["text_chunk"].values
+        chunk_texts = self.rag_source.iloc[closest_chunk_indexes]["text_chunk"].values
         return chunk_texts
     
     def answer_rag(
@@ -177,3 +185,52 @@ class ConversationAgent:
     ) -> Generator[Optional[str], Any, None]:
         documentation = self.search_doc(user_question, num_docs=num_docs)
         return self.get_answer_llm_async(message_hist=message_hist, user_question=user_question, temperature=temperature, top_p=top_p, prompt_template=self.RAG_PROMPT_TEMPLATE, documentation=documentation)
+
+    def prepare_for_rag(self, pdf_document):
+        document_text = self.extract_text(pdf_document)
+        sentence_list = self.split_in_sentences(document_text)
+        chunk_list = self.separate_in_chunks(sentence_list)
+        embedding_dataframe = self.create_dataframe_from_chunks(chunk_list)
+        return embedding_dataframe
+
+    def extract_text(self, pdf_document):
+        reader = PdfReader(pdf_document)
+        parts = []
+        for i in range(len(reader.pages)):
+            parts.append(reader.pages[i].extract_text())
+        full_pdf_text = " ".join(parts)
+        return full_pdf_text
+
+    def split_in_sentences(self, text_str):
+        sentence_list = re.split('\\. |\\! |\\? ', text_str)
+        for i in range(len(sentence_list)):
+            sentence_list[i] = sentence_list[i].replace("\n", " ")
+        return sentence_list
+    
+    def separate_in_chunks(self, sentence_list):
+        chunk_list = []
+        current_chunk = ""
+        threshold = 1024
+        i=0
+
+        sentence_list = [element for element in sentence_list if len(element) < 400]
+        while i < len(sentence_list):
+            accept_new_sentence = (len(current_chunk) + len(sentence_list[i])) < threshold
+            if accept_new_sentence:
+                current_chunk = current_chunk + ". " + sentence_list[i]
+            else:
+                chunk_list.append(current_chunk)
+                current_chunk = ""
+                if i > 0:
+                    current_chunk += sentence_list[i-1] + ". " + sentence_list[i]
+                else:
+                    current_chunk += sentence_list[i]
+            i+=1
+
+        chunk_list.append(current_chunk)
+        return chunk_list
+    
+    def create_dataframe_from_chunks(self, chunk_list):
+        embedding_data = self.EMBEDDING_MODEL.encode(chunk_list)
+        embedding_dataframe = pd.DataFrame({"text_chunk" : chunk_list, "embedding" : list(embedding_data)})
+        return embedding_dataframe
