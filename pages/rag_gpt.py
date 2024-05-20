@@ -19,9 +19,10 @@ competency_analysis_agent = ConversationAgent()
 if "message_hist" not in st.session_state:
     st.session_state.message_hist = []
 
-pdf_uiagent.create_layout()
-pdf_uiagent.greet()
+# Message de bienvenue à l'utilisateur et bouton "nouveau chat"
+pdf_uiagent.reset_button()
 
+# Affichage de l'historique des messages
 if st.session_state.message_hist == []:
     pdf_uiagent.initialize_conv(competency_analysis_agent.random_intro())
 else:
@@ -29,16 +30,14 @@ else:
 
 # This is the user's textbox for chatting with the assistant
 if prompt := st.chat_input("Quelle est votre question ?"):
-    new_message = {"role": "user", "content": prompt}
-    st.session_state.message_hist.append(new_message)
+    # Lors de la réception d'un message, on affiche le message, on récupère la réponse et on l'affiche à l'écran.
     pdf_uiagent.format_user_question(prompt)
-    
     streamed_response = competency_analysis_agent.answer_rag(
             message_hist=st.session_state.message_hist[-2:], 
             user_question = prompt
         )
     full_str_reponse = pdf_uiagent.format_llm_response(streamed_response)
 
-    st.session_state.message_hist.append(
-        {"role": "assistant", "content": full_str_reponse}
-    )
+    # On met à jour notre historique de messages
+    st.session_state.message_hist.append({"role": "user", "content": prompt})
+    st.session_state.message_hist.append({"role": "assistant", "content": full_str_reponse})
