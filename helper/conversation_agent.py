@@ -47,6 +47,11 @@ class ConversationAgent:
             self.EMBEDDING_MODEL = SentenceTransformer(EMBEDDING_MODEL_NAME)
     
     def set_rag_source(self, source="local"):
+        """
+        Quand un utilisateur veut utiliser le RAG, initialise la source à interroger.
+        input:
+            source (pdf ou "local")
+        """
         if source=="local":
             self.rag_source = LOCAL_RAG_DB
         else:
@@ -187,6 +192,13 @@ class ConversationAgent:
         return self.get_answer_llm_async(message_hist=message_hist, user_question=user_question, temperature=temperature, top_p=top_p, prompt_template=self.RAG_PROMPT_TEMPLATE, documentation=documentation)
 
     def prepare_for_rag(self, pdf_document):
+        """
+        Méthode qui prend en entrée un pdf et le traite afin de pouvoir en faire un dataframe contenant des chunks et leur embedding.
+        input:
+            pdf_document
+        output:
+            embedding_dataframe (pandas dataframe)
+        """
         document_text = self.extract_text(pdf_document)
         sentence_list = self.split_in_sentences(document_text)
         chunk_list = self.separate_in_chunks(sentence_list)
@@ -194,6 +206,13 @@ class ConversationAgent:
         return embedding_dataframe
 
     def extract_text(self, pdf_document):
+        """
+        Extrait le texte de toutes les pages d'un pdf. Ne récupère pas les figures, les schemas ou les images.
+        input:
+            pdf_document
+        output:
+            full_pdf_text (str)
+        """
         reader = PdfReader(pdf_document)
         parts = []
         for i in range(len(reader.pages)):
@@ -202,12 +221,26 @@ class ConversationAgent:
         return full_pdf_text
 
     def split_in_sentences(self, text_str):
+        """
+        Prend un texte et le sépare en phrase en utilisant la ponctuation.
+        input:
+            text_str (str)
+        output:
+            sentence_list (list)
+        """
         sentence_list = re.split('\\. |\\! |\\? ', text_str)
         for i in range(len(sentence_list)):
             sentence_list[i] = sentence_list[i].replace("\n", " ")
         return sentence_list
     
     def separate_in_chunks(self, sentence_list):
+        """
+        Prend une liste de phrase et les sépare en chunks. ATTENTION : ignore les phrases "trop longues" pour l'instant (désolé Proust).
+        input:
+            sentence_list (str)
+        output:
+            chunk_list (list)
+        """
         chunk_list = []
         current_chunk = ""
         threshold = 1024
@@ -231,6 +264,13 @@ class ConversationAgent:
         return chunk_list
     
     def create_dataframe_from_chunks(self, chunk_list):
+        """
+        Récupère une liste de chunks et en fait l'embedding afin de créer un dataframe python qui pourra ensuite être utilisé pour faire du RAG.
+        input:
+            chunk_list (list)
+        output:
+            embedding_dataframe (pandas dataframe)
+        """
         embedding_data = self.EMBEDDING_MODEL.encode(chunk_list)
         embedding_dataframe = pd.DataFrame({"text_chunk" : chunk_list, "embedding" : list(embedding_data)})
         return embedding_dataframe
