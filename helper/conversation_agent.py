@@ -3,6 +3,7 @@ Contient un ensemble de fonctions afin de pouvoir créer un agent conversationne
 
 """
 
+import cohere
 from dotenv import load_dotenv
 import numpy as np
 from openai import OpenAI
@@ -21,7 +22,10 @@ from typing import List, Dict, Generator, Any, Optional
 load_dotenv()
 
 OPENAI_KEY = os.environ.get("OPENAI_KEY")
+COHERE_KEY = os.environ.get("COHERE_KEY")
+COHERE_CLIENT = cohere.Client(COHERE_KEY)
 OPENAI_CLIENT = OpenAI(api_key=OPENAI_KEY)
+COHERE_MODEL = "rerank-multilingual-v3.0"
 SYSTEM_PROMPT = "Commence tes phrases par 'shiver me timbers matelot !'"
 with open("data/rag_prompt.txt") as file:
     RAG_PROMPT_TEMPLATE = "".join(file.readlines())
@@ -40,6 +44,9 @@ class ConversationAgent:
         self.OPENAI_KEY = OPENAI_KEY
         self.OPENAI_CLIENT = OPENAI_CLIENT
         self.SYSTEM_PROMPT = SYSTEM_PROMPT
+        self.COHERE_KEY = COHERE_KEY
+        self.COHERE_CLIENT = COHERE_CLIENT
+        self.COHERE_MODEL = COHERE_MODEL
 
         # Etapes longues. Ne pas faire systématiquement.
         if RAG_DOC:
@@ -162,7 +169,7 @@ class ConversationAgent:
     def search_doc(
             self,
             user_question: str,
-            num_docs: int=5
+            num_docs: int=10
     ):
         """
         Méthode qui à une question posée retourne les morceaux de textes les plus pertinents dans la documentation.
@@ -180,15 +187,33 @@ class ConversationAgent:
         chunk_texts = self.rag_source.iloc[closest_chunk_indexes]["text_chunk"].values
         return chunk_texts
     
+    def rerank_doc(
+            self,
+            user_question: str,
+            documents: list,
+            top_n: int = 3
+    ):
+        response = self.COHERE_CLIENT.rerank(
+            model=self.COHERE_MODEL,
+            query=user_question,
+            documents=documents.tolist(),
+            top_n=top_n
+        )
+        new_documentation = []
+        for element in response.results:
+            new_documentation.append(documents[element.index])
+        return new_documentation
+    
     def answer_rag(
         self,
         message_hist: List[Dict[str, str]],
         user_question: str,
         temperature=0.5,
         top_p=0.5,
-        num_docs=5
+        num_docs=10
     ) -> Generator[Optional[str], Any, None]:
         documentation = self.search_doc(user_question, num_docs=num_docs)
+        documentation = self.rerank_doc(user_question, documents=documentation)
         return self.get_answer_llm_async(message_hist=message_hist, user_question=user_question, temperature=temperature, top_p=top_p, prompt_template=self.RAG_PROMPT_TEMPLATE, documentation=documentation)
 
     def prepare_for_rag(self, pdf_document):
