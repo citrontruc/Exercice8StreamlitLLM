@@ -193,6 +193,18 @@ class ConversationAgent:
             documents: list,
             top_n: int = 3
     ):
+        """
+        Nous avons récupérer les documents utilisateurs pertinents. Nous voulons les classés afin de ne garder que ceux qui répondent à la question utilisateur.
+        
+        input :
+            user_question (str)
+            documents (list)
+            top_n (int)
+
+        output :
+            new_documentation (list)
+    
+    """
         response = self.COHERE_CLIENT.rerank(
             model=self.COHERE_MODEL,
             query=user_question,
